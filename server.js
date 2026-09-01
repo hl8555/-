@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "responses.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const SUPABASE_SECRET_KEY = (process.env.SUPABASE_SECRET_KEY || "").trim();
 const SUPABASE_TABLE = "responses";
 const useSupabase = Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY);
@@ -41,13 +41,21 @@ function ensureFileStore() {
 }
 
 function rowToRecord(row) {
+  let answers = row.answers;
+  if (typeof answers === "string") {
+    try {
+      answers = JSON.parse(answers);
+    } catch {
+      answers = [];
+    }
+  }
   return {
     id: row.id,
-    affiliation: row.affiliation,
-    name: row.name,
-    answers: row.answers,
-    total: row.total,
-    createdAt: row.created_at,
+    affiliation: row.affiliation || "",
+    name: row.name || "",
+    answers: Array.isArray(answers) ? answers : [],
+    total: Number(row.total) || 0,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
   };
 }
 
@@ -84,7 +92,7 @@ async function insertResponse(record) {
       created_at: record.createdAt,
     });
     if (error) {
-      console.error("[Supabase INSERT 에러 상세]", error);
+      console.error("[Supabase INSERT 에러]", error);
       throw error;
     }
     return;
@@ -295,7 +303,8 @@ const server = http.createServer(async (req, res) => {
       });
     } catch (err) {
       console.error("[Stats 처리 중 에러]:", err);
-      return sendJson(res, 400, { error: "요청을 처리할 수 없습니다." });
+      const msg = err && err.message ? err.message : "요청을 처리할 수 없습니다.";
+      return sendJson(res, 400, { error: msg });
     }
   }
 
@@ -310,7 +319,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error("[Reset 처리 중 에러]:", err);
-      return sendJson(res, 400, { error: "요청을 처리할 수 없습니다." });
+      const msg = err && err.message ? err.message : "요청을 처리할 수 없습니다.";
+      return sendJson(res, 400, { error: msg });
     }
   }
 
