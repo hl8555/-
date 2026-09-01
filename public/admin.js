@@ -30,13 +30,17 @@ function formatDate(iso) {
 }
 
 async function fetchStats(password) {
-  const res = await fetch("/api/admin/stats", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-  const data = await res.json();
-  return { ok: res.ok, status: res.status, data };
+  try {
+    const res = await fetch("/api/admin/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    return { ok: res.ok, status: res.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: e.message } };
+  }
 }
 
 function renderStats(data) {
@@ -51,15 +55,18 @@ function renderStats(data) {
   } else {
     data.perQuestion.forEach((q) => {
       const pct = (q.average / 5) * 100;
-      const distText = q.distribution
-        .map((cnt, i) => `${SCALE_LABELS[i]} ${cnt}`)
-        .join(" · ");
+      const distText = Array.isArray(q.distribution)
+        ? q.distribution.map((cnt, i) => `${SCALE_LABELS[i]} ${cnt}`).join(" · ")
+        : Object.entries(q.distribution || {})
+            .map(([score, cnt]) => `${score}점 ${cnt}명`)
+            .join(" · ");
+
       const row = document.createElement("div");
       row.className = "qbar";
       row.innerHTML = `
         <div class="qbar-head">
-          <span class="qbar-text">${q.index + 1}. ${escapeHtml(q.text)}</span>
-          <span class="qbar-avg">${q.average.toFixed(2)}</span>
+          <span class="qbar-text">${q.index}. ${escapeHtml(q.text)}</span>
+          <span class="qbar-avg">${Number(q.average).toFixed(2)}</span>
         </div>
         <div class="qbar-track">
           <div class="qbar-fill" style="width:${pct}%"></div>
@@ -74,7 +81,7 @@ function renderStats(data) {
   if (data.count === 0) {
     tbody.innerHTML = `<tr><td colspan="4" class="empty">아직 응답이 없습니다.</td></tr>`;
   } else {
-    const sorted = [...data.individuals].sort(
+    const sorted = [...(data.individuals || [])].sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
     for (const p of sorted) {
@@ -99,15 +106,18 @@ $("form-login").addEventListener("submit", async (e) => {
   try {
     const { ok, status, data } = await fetchStats(password);
     if (!ok) {
-      err.textContent =
-        status === 401 ? "암호가 올바르지 않습니다." : data.error || "오류가 발생했습니다.";
+      if (status === 401) {
+        err.textContent = "암호가 올바르지 않습니다.";
+      } else {
+        err.textContent = "오류: " + (data.error || "서버 응답 오류");
+      }
       return;
     }
     currentPassword = password;
     renderStats(data);
     show("dash");
-  } catch {
-    err.textContent = "네트워크 오류가 발생했습니다.";
+  } catch (errCatch) {
+    err.textContent = "오류 발생: " + errCatch.message;
   } finally {
     btn.disabled = false;
   }
@@ -156,8 +166,7 @@ $("btn-reset").addEventListener("click", async () => {
     if (refreshed.ok) renderStats(refreshed.data);
     msg.textContent = "모든 응답을 초기화했습니다. 이후 응답부터 다시 집계됩니다.";
   } catch (resetError) {
-    void resetError;
-    msg.textContent = "네트워크 오류로 초기화에 실패했습니다.";
+    msg.textContent = "오류로 초기화에 실패했습니다: " + resetError.message;
     msg.classList.add("is-error");
   } finally {
     btn.disabled = false;
