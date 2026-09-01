@@ -12,10 +12,26 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "responses.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
-const SUPABASE_SECRET_KEY = (process.env.SUPABASE_SECRET_KEY || "").trim();
+// URL 자동 정제: 뒤에 어떤 경로(/rest/v1 등)나 슬래시, 공백이 붙어있어도 순수 origin만 추출
+function sanitizeSupabaseUrl(rawUrl) {
+  if (!rawUrl) return "";
+  let clean = rawUrl.trim().replace(/^["']|["']$/g, "");
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+    clean = "https://" + clean;
+  }
+  try {
+    const parsed = new URL(clean);
+    return parsed.origin; // 항상 https://xxxx.supabase.co 형태로만 반환
+  } catch {
+    return clean.replace(/\/+$/, "");
+  }
+}
+
+const SUPABASE_URL = sanitizeSupabaseUrl(process.env.SUPABASE_URL);
+const SUPABASE_SECRET_KEY = (process.env.SUPABASE_SECRET_KEY || "").trim().replace(/^["']|["']$/g, "");
 const SUPABASE_TABLE = "responses";
 const useSupabase = Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY);
+
 const supabase = useSupabase
   ? createClient(SUPABASE_URL, SUPABASE_SECRET_KEY)
   : null;
@@ -92,7 +108,7 @@ async function insertResponse(record) {
       created_at: record.createdAt,
     });
     if (error) {
-      console.error("[Supabase INSERT 에러]", error);
+      console.error("[Supabase INSERT 에러 상세]", error);
       throw error;
     }
     return;
@@ -334,7 +350,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   if (useSupabase) {
-    console.log("데이터 저장: Supabase (영구 보존)");
+    console.log(`데이터 저장: Supabase (영구 보존) [URL: ${SUPABASE_URL}]`);
   } else {
     ensureFileStore();
     console.log(
