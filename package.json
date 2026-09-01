@@ -1,0 +1,14 @@
+{
+  "name": "social-emotional-test",
+  "version": "1.0.0",
+  "description": "성인 사회정서역량 테스트 (오은혜, 최윤정, 신태섭, 2022)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
