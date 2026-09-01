@@ -12,8 +12,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "responses.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SECRET_KEY = (process.env.SUPABASE_SECRET_KEY || "").trim();
 const SUPABASE_TABLE = "responses";
 const useSupabase = Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY);
 const supabase = useSupabase
@@ -34,10 +34,6 @@ const QUESTIONS = [
   "나는 내가 결정한 일의 결과가 좋지 않아도 인정할 수 있다.",
 ];
 const MAX_SCORE = QUESTIONS.length * 5;
-
-// 저장 계층: SUPABASE_URL·SUPABASE_SECRET_KEY 환경변수가 있으면 Supabase(Postgres),
-// 없으면 로컬 파일(data/responses.json)로 자동 전환됩니다.
-// Render 같은 무료 호스팅은 재배포 시 파일이 초기화되므로 배포 환경에서는 Supabase를 사용하세요.
 
 function ensureFileStore() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -61,7 +57,10 @@ async function listResponses() {
       .from(SUPABASE_TABLE)
       .select("*")
       .order("created_at", { ascending: true });
-    if (error) throw error;
+    if (error) {
+      console.error("[Supabase SELECT 에러]", error);
+      throw error;
+    }
     return (data || []).map(rowToRecord);
   }
   ensureFileStore();
@@ -84,7 +83,10 @@ async function insertResponse(record) {
       total: record.total,
       created_at: record.createdAt,
     });
-    if (error) throw error;
+    if (error) {
+      console.error("[Supabase INSERT 에러 상세]", error);
+      throw error;
+    }
     return;
   }
   ensureFileStore();
@@ -101,7 +103,10 @@ async function clearResponses() {
       .from(SUPABASE_TABLE)
       .delete()
       .neq("id", "__none__");
-    if (error) throw error;
+    if (error) {
+      console.error("[Supabase DELETE 에러]", error);
+      throw error;
+    }
     return;
   }
   ensureFileStore();
@@ -225,7 +230,9 @@ const server = http.createServer(async (req, res) => {
         affiliation,
       });
     } catch (err) {
-      return sendJson(res, 400, { error: "요청을 처리할 수 없습니다." });
+      console.error("[Submit 처리 중 에러 발생]:", err);
+      const msg = err && err.message ? err.message : "요청을 처리할 수 없습니다.";
+      return sendJson(res, 400, { error: msg });
     }
   }
 
@@ -287,6 +294,7 @@ const server = http.createServer(async (req, res) => {
         perQuestion,
       });
     } catch (err) {
+      console.error("[Stats 처리 중 에러]:", err);
       return sendJson(res, 400, { error: "요청을 처리할 수 없습니다." });
     }
   }
@@ -301,6 +309,7 @@ const server = http.createServer(async (req, res) => {
       await clearResponses();
       return sendJson(res, 200, { ok: true });
     } catch (err) {
+      console.error("[Reset 처리 중 에러]:", err);
       return sendJson(res, 400, { error: "요청을 처리할 수 없습니다." });
     }
   }
